@@ -2,17 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
-  ShoppingCart, Menu, X, Search, Globe, BarChart3, LogOut 
+  ShoppingCart, Menu, X, Search, Globe, BarChart3
 } from 'lucide-react';
 import useCartStore from '../../store/cartStore';
-import useAuthStore from '../../store/authStore';
 import LanguageSwitcher from './LanguageSwitcher';
 
 const Header: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const cartCount = useCartStore(state => state.getCartCount());
-  const { isAuthenticated, logout } = useAuthStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
@@ -44,18 +42,6 @@ const Header: React.FC = () => {
     setSearchQuery('');
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
-  const handleDashboardClick = (e: React.MouseEvent) => {
-    if (!isAuthenticated) {
-      e.preventDefault();
-      navigate('/login');
-    }
-  };
-
   const headerClasses = `fixed w-full top-0 z-[100] transition-all duration-300 ${
     !isHomePage || isScrolled ? 'bg-green-700 shadow-md' : 'bg-transparent'
   }`;
@@ -65,7 +51,7 @@ const Header: React.FC = () => {
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2">
-            <BarChart3 className="h-8 w-8" />
+            <BarChart3 className="h-8 w-8 text-white" />
             <span className="text-xl font-bold text-white">{t('general.appName')}</span>
           </Link>
 
@@ -111,22 +97,6 @@ const Header: React.FC = () => {
                 </span>
               )}
             </Link>
-
-            {isAuthenticated ? (
-              <button 
-                onClick={handleLogout} 
-                className="text-white hover:text-yellow-300 transition-colors"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
-            ) : (
-              <Link 
-                to="/login"
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full transition-colors"
-              >
-                Sign In
-              </Link>
-            )}
 
             <button 
               className="md:hidden focus:outline-none text-white" 
