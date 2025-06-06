@@ -43,9 +43,11 @@ export interface Review {
 
 export interface User {
   id: string;
-  username: string;
-  password: string;
-  role: 'admin' | 'user';
+  email: string;
+  fullName: string;
+  phoneNumber: string | null;
+  shippingAddresses: ShippingAddress[];
+  paymentMethods: PaymentMethod[];
 }
 
 export interface CartItem {
@@ -65,6 +67,49 @@ export interface OrderSummary {
   subtotal: number;
   shipping: number;
   total: number;
+  currency: 'XAF';
+}
+
+export interface ShippingAddress {
+  id: string;
+  userId: string;
+  fullName: string;
+  location: string;
+  coordinates?: {
+    lat: number;
+    lng: number;
+  };
+  isDefault: boolean;
+}
+
+export interface PaymentMethod {
+  id: string;
+  userId: string;
+  type: 'MTN_MOBILE_MONEY' | 'ORANGE_MONEY';
+  mobileNumber: string;
+  isDefault: boolean;
+}
+
+export interface Order {
+  id: string;
+  userId?: string;
+  items: CartItem[];
+  totalAmount: number;
+  status: OrderStatus;
+  shippingAddress: ShippingAddress;
+  paymentMethod: PaymentMethod;
+  createdAt: string;
+  updatedAt: string;
+  guestEmail?: string;
+  guestPhone?: string;
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  SHIPPED = 'SHIPPED',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED'
 }
 
 export interface Database {
@@ -170,4 +215,42 @@ export interface Database {
       };
     };
   };
+}
+
+export type AdminRole = 'super_admin' | 'admin';
+
+export interface Admin {
+  id: string;
+  email: string;
+  fullName: string;
+  role: AdminRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type NewProduct = Omit<Product, 'id' | 'rating' | 'reviews' | 'createdat' | 'updatedat'>;
+
+export interface BilingualText {
+  en: string;
+  fr: string;
+}
+
+// Update Product interface
+export interface Product {
+  id: string;
+  name: BilingualText;
+  description: BilingualText;
+  price: number;
+  category: BilingualText;
+  brand: string;
+  instock: number;
+  imageurl: string;
+  specifications: {
+    [key: string]: BilingualText;
+  };
+  features: BilingualText[];
+  rating: number;
+  reviews: Review[];
+  createdat: string;
+  updatedat: string;
 }

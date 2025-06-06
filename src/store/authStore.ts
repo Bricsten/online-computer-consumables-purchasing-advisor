@@ -1,61 +1,320 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User } from '../types';
-import { supabase } from '../lib/supabase';
+import { User, ShippingAddress, PaymentMethod } from '../types';
+import { supabase, handleSupabaseError } from '../lib/supabase';
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
+  register: (email: string, password: string, fullName: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
+  addShippingAddress: (address: Omit<ShippingAddress, 'id' | 'userId'>) => Promise<void>;
+  addPaymentMethod: (method: Omit<PaymentMethod, 'id' | 'userId'>) => Promise<void>;
+  setDefaultShippingAddress: (addressId: string) => Promise<void>;
+  setDefaultPaymentMethod: (methodId: string) => Promise<void>;
 }
 
 const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
-      
+      isLoading: false,
+      error: null,
+
       login: async (email: string, password: string) => {
+        set({ isLoading: true, error: null });
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({
+          console.log('Attempting to sign in with email:', email);
+          
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email,
             password
           });
 
-          if (error) {
-            console.error('Login error:', error.message);
-            return false;
+          if (authError) {
+            console.error('Authentication error:', authError);
+            throw authError;
           }
 
-          if (data.user) {
+          console.log('Auth successful:', authData);
+
+          if (authData.user) {
+            console.log('Fetching user data for ID:', authData.user.id);
+            
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('*, shipping_addresses(*), payment_methods(*)')
+              .eq('id', authData.user.id)
+              .single();
+
+            if (userError) {
+              console.error('Error fetching user data:', userError);
+              throw userError;
+            }
+
+            console.log('User data fetched:', userData);
+
             set({ 
               user: {
-                id: data.user.id,
-                username: data.user.email || '',
-                role: 'admin'
-              }, 
-              isAuthenticated: true 
+                id: authData.user.id,
+                email: authData.user.email!,
+                fullName: userData.full_name,
+                phoneNumber: userData.phone_number,
+                shippingAddresses: userData.shipping_addresses || [],
+                paymentMethods: userData.payment_methods || []
+              },
+              isAuthenticated: true,
+              isLoading: false
             });
             return true;
           }
-
           return false;
         } catch (error) {
           console.error('Login error:', error);
+          set({ error: handleSupabaseError(error), isLoading: false });
           return false;
         }
       },
-      
+
+      register: async (email: string, password: string, fullName: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          console.log('Attempting to register with email:', email);
+
+          // Try to sign up the user
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                full_name: fullName
+              }
+            }
+          });
+
+          if (authError) {
+            console.error('Registration error:', authError);
+            throw authError;
+          }
+
+          console.log('Registration successful:', authData);
+
+          if (authData.user) {
+            console.log('Creating user record for ID:', authData.user.id);
+            
+            const timestamp = new Date().toISOString();
+            const { error: userError } = await supabase
+              .from('users')
+              .insert([
+                {
+                  id: authData.user.id,
+                  email: authData.user.email,
+                  full_name: fullName,
+                  phone_number: null,
+                  created_at: timestamp,
+                  updated_at: timestamp
+                }
+              ])
+              .select()
+              .single();
+
+            if (userError) {
+              console.error('Error creating user record:', userError);
+              // If we fail to create the user record, we should clean up the auth user
+              await supabase.auth.signOut();
+              throw userError;
+            }
+
+            console.log('User record created successfully');
+
+            set({ 
+              user: {
+                id: authData.user.id,
+                email: authData.user.email!,
+                fullName,
+                phoneNumber: null,
+                shippingAddresses: [],
+                paymentMethods: []
+              },
+              isAuthenticated: true,
+              isLoading: false
+            });
+            return true;
+          }
+          return false;
+        } catch (error: any) {
+          console.error('Registration error:', error);
+          // Handle specific error cases
+          if (error.message?.toLowerCase().includes('already registered')) {
+            set({ 
+              error: 'This email is already registered. Please try logging in instead.',
+              isLoading: false 
+            });
+          } else {
+            set({ 
+              error: handleSupabaseError(error),
+              isLoading: false 
+            });
+          }
+          return false;
+        }
+      },
+
       logout: async () => {
+        set({ isLoading: true, error: null });
         try {
           const { error } = await supabase.auth.signOut();
-          if (error) {
-            console.error('Logout error:', error.message);
-          }
-          set({ user: null, isAuthenticated: false });
+          if (error) throw error;
+          set({ user: null, isAuthenticated: false, isLoading: false });
         } catch (error) {
-          console.error('Logout error:', error);
+          set({ error: (error as Error).message, isLoading: false });
+        }
+      },
+
+      updateProfile: async (data: Partial<User>) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { error } = await supabase
+            .from('users')
+            .update({
+              full_name: data.fullName,
+              phone_number: data.phoneNumber
+            })
+            .eq('id', get().user?.id);
+
+          if (error) throw error;
+
+          set(state => ({
+            user: state.user ? { ...state.user, ...data } : null,
+            isLoading: false
+          }));
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
+        }
+      },
+
+      addShippingAddress: async (address: Omit<ShippingAddress, 'id' | 'userId'>) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { data, error } = await supabase
+            .from('shipping_addresses')
+            .insert([
+              {
+                user_id: get().user?.id,
+                ...address
+              }
+            ])
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          set(state => ({
+            user: state.user ? {
+              ...state.user,
+              shippingAddresses: [...(state.user.shippingAddresses || []), data]
+            } : null,
+            isLoading: false
+          }));
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
+        }
+      },
+
+      addPaymentMethod: async (method: Omit<PaymentMethod, 'id' | 'userId'>) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { data, error } = await supabase
+            .from('payment_methods')
+            .insert([
+              {
+                user_id: get().user?.id,
+                ...method
+              }
+            ])
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          set(state => ({
+            user: state.user ? {
+              ...state.user,
+              paymentMethods: [...(state.user.paymentMethods || []), data]
+            } : null,
+            isLoading: false
+          }));
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
+        }
+      },
+
+      setDefaultShippingAddress: async (addressId: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { error } = await supabase
+            .from('shipping_addresses')
+            .update({ is_default: false })
+            .eq('user_id', get().user?.id);
+
+          if (error) throw error;
+
+          const { error: error2 } = await supabase
+            .from('shipping_addresses')
+            .update({ is_default: true })
+            .eq('id', addressId);
+
+          if (error2) throw error2;
+
+          set(state => ({
+            user: state.user ? {
+              ...state.user,
+              shippingAddresses: state.user.shippingAddresses?.map(addr => ({
+                ...addr,
+                isDefault: addr.id === addressId
+              }))
+            } : null,
+            isLoading: false
+          }));
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
+        }
+      },
+
+      setDefaultPaymentMethod: async (methodId: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { error } = await supabase
+            .from('payment_methods')
+            .update({ is_default: false })
+            .eq('user_id', get().user?.id);
+
+          if (error) throw error;
+
+          const { error: error2 } = await supabase
+            .from('payment_methods')
+            .update({ is_default: true })
+            .eq('id', methodId);
+
+          if (error2) throw error2;
+
+          set(state => ({
+            user: state.user ? {
+              ...state.user,
+              paymentMethods: state.user.paymentMethods?.map(method => ({
+                ...method,
+                isDefault: method.id === methodId
+              }))
+            } : null,
+            isLoading: false
+          }));
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
         }
       }
     }),

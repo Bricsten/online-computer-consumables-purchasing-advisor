@@ -1,23 +1,31 @@
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
+import { useLocation } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import WhatsAppButton from '../UI/WhatsAppButton';
+import ReviewModal from '../Reviews/ReviewModal';
+import useReviewModalStore from '../../store/reviewModalStore';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const location = useLocation();
+  const isHomePage = location.pathname === '/';
+  const { isOpen, closeModal } = useReviewModalStore();
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <main className="flex-grow">
+      <main className={`flex-grow ${!isHomePage ? 'pt-20' : ''}`}>
         {children}
       </main>
       <Footer />
       <WhatsAppButton />
       <Toaster position="bottom-right" />
+      <ReviewModal isOpen={isOpen} onClose={closeModal} />
       
       {/* Chatbase AI chatbot integration */}
       <script

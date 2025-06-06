@@ -1,14 +1,13 @@
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('fr-CM', {
-    style: 'currency',
-    currency: 'XAF',
+    style: 'decimal',
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0
+    maximumFractionDigits: 0,
   }).format(amount);
 };
 
-export const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString('en-CM', {
+export const formatDate = (date: string): string => {
+  return new Date(date).toLocaleDateString('fr-CM', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'

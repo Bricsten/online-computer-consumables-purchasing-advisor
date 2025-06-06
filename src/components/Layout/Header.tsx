@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -15,7 +15,24 @@ const Header: React.FC = () => {
   const { isAuthenticated, logout } = useAuthStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
+
+  const isHomePage = location.pathname === '/';
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      setIsScrolled(scrollPosition > 50);
+    };
+
+    if (isHomePage) {
+      window.addEventListener('scroll', handleScroll);
+      return () => window.removeEventListener('scroll', handleScroll);
+    } else {
+      setIsScrolled(true);
+    }
+  }, [isHomePage]);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -39,24 +56,28 @@ const Header: React.FC = () => {
     }
   };
 
+  const headerClasses = `fixed w-full top-0 z-[100] transition-all duration-300 ${
+    !isHomePage || isScrolled ? 'bg-green-700 shadow-md' : 'bg-transparent'
+  }`;
+
   return (
-    <header className="bg-green-700 text-white shadow-md sticky top-0 z-[100]">
+    <header className={headerClasses}>
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2">
             <BarChart3 className="h-8 w-8" />
-            <span className="text-xl font-bold">{t('general.appName')}</span>
+            <span className="text-xl font-bold text-white">{t('general.appName')}</span>
           </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link to="/" className="hover:text-yellow-300 transition-colors">
+            <Link to="/" className="text-white hover:text-yellow-300 transition-colors">
               {t('nav.home')}
             </Link>
-            <Link to="/products" className="hover:text-yellow-300 transition-colors">
+            <Link to="/products" className="text-white hover:text-yellow-300 transition-colors">
               {t('nav.products')}
             </Link>
-            <Link to="/compare" className="hover:text-yellow-300 transition-colors">
+            <Link to="/compare" className="text-white hover:text-yellow-300 transition-colors">
               {t('nav.compare')}
             </Link>
           </nav>
@@ -83,7 +104,7 @@ const Header: React.FC = () => {
             </div>
 
             <Link to="/cart" className="relative">
-              <ShoppingCart className="h-6 w-6 hover:text-yellow-300 transition-colors" />
+              <ShoppingCart className="h-6 w-6 text-white hover:text-yellow-300 transition-colors" />
               {cartCount > 0 && (
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
                   {cartCount}
@@ -91,17 +112,24 @@ const Header: React.FC = () => {
               )}
             </Link>
 
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <button 
                 onClick={handleLogout} 
-                className="hover:text-yellow-300 transition-colors"
+                className="text-white hover:text-yellow-300 transition-colors"
               >
                 <LogOut className="h-5 w-5" />
               </button>
+            ) : (
+              <Link 
+                to="/login"
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full transition-colors"
+              >
+                Sign In
+              </Link>
             )}
 
             <button 
-              className="md:hidden focus:outline-none" 
+              className="md:hidden focus:outline-none text-white" 
               onClick={toggleMenu}
             >
               {isMenuOpen ? (
@@ -120,21 +148,21 @@ const Header: React.FC = () => {
           <nav className="flex flex-col space-y-4">
             <Link 
               to="/" 
-              className="hover:text-yellow-300 transition-colors"
+              className="text-white hover:text-yellow-300 transition-colors"
               onClick={() => setIsMenuOpen(false)}
             >
               {t('nav.home')}
             </Link>
             <Link 
               to="/products" 
-              className="hover:text-yellow-300 transition-colors"
+              className="text-white hover:text-yellow-300 transition-colors"
               onClick={() => setIsMenuOpen(false)}
             >
               {t('nav.products')}
             </Link>
             <Link 
               to="/compare" 
-              className="hover:text-yellow-300 transition-colors"
+              className="text-white hover:text-yellow-300 transition-colors"
               onClick={() => setIsMenuOpen(false)}
             >
               {t('nav.compare')}
