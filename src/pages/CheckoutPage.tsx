@@ -2,14 +2,22 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { ShoppingBag, CreditCard } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
+import GuestCheckoutForm from '../components/Checkout/GuestCheckoutForm';
 import useCartStore from '../store/cartStore';
 import useUserAuthStore from '../store/userAuthStore';
 import useOrderStore from '../store/orderStore';
 import useReviewModalStore from '../store/reviewModalStore';
 import { downloadReceipt } from '../utils/generateReceipt';
 import toast from 'react-hot-toast';
+
+interface GuestData {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  address: string;
+}
 
 const CheckoutPage: React.FC = () => {
   const { t } = useTranslation();
@@ -21,6 +29,8 @@ const CheckoutPage: React.FC = () => {
   const [selectedPayment, setSelectedPayment] = useState<'mtn' | 'orange'>('mtn');
   const [mobileNumber, setMobileNumber] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [guestData, setGuestData] = useState<GuestData | null>(null);
+  const [showPayment, setShowPayment] = useState(!!user);
 
   // Get order summary details
   const { subtotal, shipping, total } = getOrderSummary();
@@ -49,6 +59,11 @@ const CheckoutPage: React.FC = () => {
     );
   }
 
+  const handleGuestSubmit = (data: GuestData) => {
+    setGuestData(data);
+    setShowPayment(true);
+  };
+
   const handlePaymentConfirm = async () => {
     if (!mobileNumber) {
       toast.error(t('Please enter your mobile money number'));
@@ -57,7 +72,7 @@ const CheckoutPage: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      // Create order object
+      // Create order object with conditional guest data
       const orderData = {
         user_id: user?.id,
         items: items.map(item => ({
@@ -70,7 +85,13 @@ const CheckoutPage: React.FC = () => {
         subtotal,
         shipping,
         payment_method: selectedPayment === 'mtn' ? 'MTN Mobile Money' : 'Orange Money',
-        shipping_address: user?.user_metadata?.address || '',
+        payment_number: mobileNumber,
+        shipping_address: user ? user.user_metadata?.address : guestData?.address,
+        guest_info: !user ? {
+          full_name: guestData?.fullName,
+          email: guestData?.email,
+          phone_number: guestData?.phoneNumber
+        } : undefined,
         created_at: new Date().toISOString()
       };
 
@@ -146,47 +167,63 @@ const CheckoutPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Payment Method */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">{t('Payment Method')}</h2>
-          <div className="space-y-4">
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setSelectedPayment('mtn')}
-                className={`flex-1 p-4 border rounded-lg ${
-                  selectedPayment === 'mtn'
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-200'
-                }`}
-              >
-                <img src="/mtn-logo.png" alt="MTN Mobile Money" className="h-8 mx-auto" />
-              </button>
-              <button
-                onClick={() => setSelectedPayment('orange')}
-                className={`flex-1 p-4 border rounded-lg ${
-                  selectedPayment === 'orange'
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-200'
-                }`}
-              >
-                <img src="/orange-logo.png" alt="Orange Money" className="h-8 mx-auto" />
-              </button>
-            </div>
+        {/* Guest Checkout Form or Payment Method */}
+        {!showPayment && !user ? (
+          <GuestCheckoutForm onSubmit={handleGuestSubmit} />
+        ) : (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 className="text-xl font-semibold mb-4">{t('Payment Method')}</h2>
+            <div className="space-y-4">
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => setSelectedPayment('mtn')}
+                  className={`flex-1 p-4 border rounded-lg ${
+                    selectedPayment === 'mtn'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <img src="/mtn-logo.png" alt="MTN Mobile Money" className="h-8 mx-auto" />
+                </button>
+                <button
+                  onClick={() => setSelectedPayment('orange')}
+                  className={`flex-1 p-4 border rounded-lg ${
+                    selectedPayment === 'orange'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <img src="/orange-logo.png" alt="Orange Money" className="h-8 mx-auto" />
+                </button>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('Enter your Mobile Money number')}
-              </label>
-              <input
-                type="tel"
-                value={mobileNumber}
-                onChange={(e) => setMobileNumber(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="6XX XXX XXX"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t('Enter your Mobile Money number')}
+                </label>
+                <input
+                  type="tel"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  pattern="^(6|2)[0-9]{8}$"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="6XX XXX XXX"
+                />
+              </div>
+
+              {/* Show guest information summary if guest checkout */}
+              {!user && guestData && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-medium mb-2">{t('Delivery Information')}</h3>
+                  <p>{guestData.fullName}</p>
+                  <p>{guestData.address}</p>
+                  <p>{guestData.phoneNumber}</p>
+                  <p>{guestData.email}</p>
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex justify-between">
@@ -196,17 +233,17 @@ const CheckoutPage: React.FC = () => {
           >
             {t('Back to Cart')}
           </button>
-          <button
-            onClick={handlePaymentConfirm}
-            disabled={isProcessing}
-            className={`px-8 py-3 bg-green-500 text-white rounded-lg transform transition-all ${
-              isProcessing
-                ? 'opacity-75 cursor-not-allowed'
-                : 'hover:bg-green-600 hover:-translate-y-0.5 hover:shadow-lg'
-            }`}
-          >
-            {isProcessing ? t('Processing...') : t('Confirm Payment')}
-          </button>
+          {showPayment && (
+            <motion.button
+              onClick={handlePaymentConfirm}
+              disabled={isProcessing}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isProcessing ? t('Processing...') : t('Confirm Payment')}
+            </motion.button>
+          )}
         </div>
       </div>
     </Layout>

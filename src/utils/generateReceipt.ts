@@ -1,90 +1,78 @@
-import jsPDF from 'jspdf';
-import { Order } from '../store/orderStore';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Order } from '../types';
 
-export const generateReceipt = (order: Order): string => {
+export const generateReceipt = (order: Order) => {
   const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let yPos = 20;
+  const pageWidth = doc.internal.pageSize.width;
 
-  // Header
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TechSupplies Cameroon', pageWidth / 2, yPos, { align: 'center' });
+  // Add header
+  doc.setFontSize(20);
+  doc.text('TechSupplies Cameroon', pageWidth / 2, 20, { align: 'center' });
   
-  // Receipt title and info
-  yPos += 20;
-  doc.setFontSize(16);
-  doc.text('Purchase Receipt', pageWidth / 2, yPos, { align: 'center' });
-  
-  // Date and Order ID
-  yPos += 20;
+  doc.setFontSize(12);
+  doc.text('Receipt', pageWidth / 2, 30, { align: 'center' });
+
+  // Add order information
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Date: ${new Date(order.created_at).toLocaleString()}`, 20, yPos);
-  doc.text(`Order ID: ${order.id}`, pageWidth - 20, yPos, { align: 'right' });
+  const orderDate = new Date(order.createdAt).toLocaleDateString();
+  doc.text(`Order Date: ${orderDate}`, 20, 40);
+  doc.text(`Order ID: ${order.id}`, 20, 45);
 
-  // Shipping Address
-  yPos += 15;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Shipping Address:', 20, yPos);
-  yPos += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.text(order.shipping_address, 20, yPos);
+  // Add customer information
+  const customerInfoY = 55;
+  if (order.userId && order.user) {
+    doc.text('Customer Information:', 20, customerInfoY);
+    doc.text(`Name: ${order.user.full_name || 'N/A'}`, 20, customerInfoY + 5);
+    doc.text(`Email: ${order.user.email || 'N/A'}`, 20, customerInfoY + 10);
+    doc.text(`Phone: ${order.user.phone_number || 'N/A'}`, 20, customerInfoY + 15);
+  } else if (order.guestInfo) {
+    doc.text('Guest Information:', 20, customerInfoY);
+    doc.text(`Name: ${order.guestInfo.full_name}`, 20, customerInfoY + 5);
+    doc.text(`Email: ${order.guestInfo.email}`, 20, customerInfoY + 10);
+    doc.text(`Phone: ${order.guestInfo.phone_number}`, 20, customerInfoY + 15);
+  }
 
-  // Items Table Header
-  yPos += 20;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Item', 20, yPos);
-  doc.text('Qty', 120, yPos);
-  doc.text('Price', 150, yPos);
-  doc.text('Total', pageWidth - 20, yPos, { align: 'right' });
-  
-  // Items
-  yPos += 5;
-  doc.line(20, yPos, pageWidth - 20, yPos);
-  
-  order.items.forEach(item => {
-    yPos += 10;
-    doc.setFont('helvetica', 'normal');
-    doc.text(item.name, 20, yPos);
-    doc.text(item.quantity.toString(), 120, yPos);
-    doc.text(`${item.price.toLocaleString()} XAF`, 150, yPos);
-    doc.text(`${(item.price * item.quantity).toLocaleString()} XAF`, pageWidth - 20, yPos, { align: 'right' });
+  // Add shipping address
+  doc.text('Shipping Address:', 20, customerInfoY + 25);
+  doc.text(order.shippingAddress, 20, customerInfoY + 30);
+
+  // Add payment information
+  doc.text('Payment Information:', 20, customerInfoY + 40);
+  doc.text(`Method: ${order.paymentMethod}`, 20, customerInfoY + 45);
+  doc.text(`Number: ${order.paymentNumber}`, 20, customerInfoY + 50);
+
+  // Add items table
+  const tableY = customerInfoY + 60;
+  autoTable(doc, {
+    startY: tableY,
+    head: [['Item', 'Quantity', 'Price (XAF)', 'Total (XAF)']],
+    body: order.items.map(item => [
+      item.name,
+      item.quantity.toString(),
+      item.price.toLocaleString(),
+      (item.price * item.quantity).toLocaleString()
+    ]),
+    foot: [
+      ['', '', 'Subtotal:', order.subtotal.toLocaleString()],
+      ['', '', 'Shipping:', order.shipping.toLocaleString()],
+      ['', '', 'Total:', order.total.toLocaleString()]
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [34, 197, 94] },
+    footStyles: { fillColor: [243, 244, 246] }
   });
 
-  // Totals
-  yPos += 10;
-  doc.line(20, yPos, pageWidth - 20, yPos);
-  yPos += 10;
-  
-  doc.text('Subtotal:', 120, yPos);
-  doc.text(`${order.subtotal.toLocaleString()} XAF`, pageWidth - 20, yPos, { align: 'right' });
-  
-  yPos += 10;
-  doc.text('Shipping:', 120, yPos);
-  doc.text(`${order.shipping.toLocaleString()} XAF`, pageWidth - 20, yPos, { align: 'right' });
-  
-  yPos += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Total:', 120, yPos);
-  doc.text(`${order.total.toLocaleString()} XAF`, pageWidth - 20, yPos, { align: 'right' });
+  // Add footer
+  const finalY = doc.lastAutoTable?.finalY || tableY;
+  doc.text('Thank you for shopping with TechSupplies Cameroon!', pageWidth / 2, finalY + 20, { align: 'center' });
+  doc.text('For any inquiries, please contact us:', pageWidth / 2, finalY + 25, { align: 'center' });
+  doc.text('Email: support@techsupplies.cm | Phone: +237 6XX XXX XXX', pageWidth / 2, finalY + 30, { align: 'center' });
 
-  // Footer
-  yPos = doc.internal.pageSize.getHeight() - 30;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Thank you for shopping with TechSupplies Cameroon!', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 5;
-  doc.text('For any questions, please contact support@techsuppliescameroon.com', pageWidth / 2, yPos, { align: 'center' });
-
-  // Generate PDF blob URL
-  return doc.output('dataurlstring');
+  // Save the PDF
+  doc.save(`receipt-${order.id}.pdf`);
 };
 
 export const downloadReceipt = (order: Order) => {
-  const doc = generateReceipt(order);
-  const link = document.createElement('a');
-  link.href = doc;
-  link.download = `receipt-${order.id}.pdf`;
-  link.click();
+  generateReceipt(order);
 }; 

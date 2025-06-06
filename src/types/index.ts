@@ -71,11 +71,11 @@ export interface OrderSummary {
 }
 
 export interface ShippingAddress {
-  id: string;
-  userId: string;
+  id?: string;
+  userId?: string;
   fullName: string;
   location: string;
-  coordinates?: {
+  coordinates: {
     lat: number;
     lng: number;
   };
@@ -83,25 +83,44 @@ export interface ShippingAddress {
 }
 
 export interface PaymentMethod {
-  id: string;
-  userId: string;
+  id?: string;
+  userId?: string;
   type: 'MTN_MOBILE_MONEY' | 'ORANGE_MONEY';
   mobileNumber: string;
   isDefault: boolean;
 }
 
+export interface GuestInfo {
+  full_name: string;
+  email: string;
+  phone_number: string;
+}
+
+export interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 export interface Order {
   id: string;
   userId?: string;
-  items: CartItem[];
-  totalAmount: number;
-  status: OrderStatus;
-  shippingAddress: ShippingAddress;
-  paymentMethod: PaymentMethod;
+  items: OrderItem[];
+  subtotal: number;
+  shipping: number;
+  total: number;
+  shippingAddress: string;
+  paymentMethod: string;
+  paymentNumber: string;
   createdAt: string;
   updatedAt: string;
-  guestEmail?: string;
-  guestPhone?: string;
+  user?: {
+    full_name: string;
+    email: string;
+    phone_number: string;
+  };
+  guestInfo?: GuestInfo;
 }
 
 export enum OrderStatus {
