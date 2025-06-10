@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { User, MapPin, Phone } from 'lucide-react';
 import { motion } from 'framer-motion';
-import ShippingLocationInput from '../Shipping/ShippingLocationInput';
+import LocationInput from '../Location/LocationInput';
+import { User } from '../../types';
+import { toast } from 'react-hot-toast';
 
-interface GuestCheckoutFormProps {
-  onSubmit: (guestData: {
+interface UserCheckoutFormProps {
+  user: User | null;
+  onSubmit: (data: {
     fullName: string;
     email: string;
     phoneNumber: string;
@@ -14,15 +16,27 @@ interface GuestCheckoutFormProps {
   }) => void;
 }
 
-const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onSubmit }) => {
+const UserCheckoutForm: React.FC<UserCheckoutFormProps> = ({ user, onSubmit }) => {
   const { t } = useTranslation();
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phoneNumber: '',
+    fullName: user?.fullName || '',
+    email: user?.email || '',
+    phoneNumber: user?.phoneNumber || '',
     address: '',
     shippingCost: 0
   });
+
+  // Update form data when user data changes
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        fullName: user.fullName || prev.fullName,
+        email: user.email || prev.email,
+        phoneNumber: user.phoneNumber || prev.phoneNumber
+      }));
+    }
+  }, [user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -47,19 +61,19 @@ const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onSubmit }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.address) {
+      toast.error(t('Please enter your shipping address'));
+      return;
+    }
     onSubmit(formData);
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
-        {t('Guest Checkout')}
-      </h2>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h2 className="text-xl font-semibold mb-6">{t('Checkout Information')}</h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            <User className="inline-block w-4 h-4 mr-2" />
             {t('Full Name')}
           </label>
           <input
@@ -71,36 +85,6 @@ const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onSubmit }) => {
             className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
             placeholder={t('Enter your full name')}
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            <MapPin className="inline-block w-4 h-4 mr-2" />
-            {t('Shipping Address')}
-          </label>
-          <ShippingLocationInput
-            onLocationSelect={handleLocationSelect}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            <Phone className="inline-block w-4 h-4 mr-2" />
-            {t('Phone Number')}
-          </label>
-          <input
-            type="tel"
-            name="phoneNumber"
-            value={formData.phoneNumber}
-            onChange={handleInputChange}
-            required
-            pattern="^(6|2)[0-9]{8}$"
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
-            placeholder="6XX XXX XXX"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            {t('Enter a valid Cameroon phone number starting with 6')}
-          </p>
         </div>
 
         <div>
@@ -118,6 +102,37 @@ const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onSubmit }) => {
           />
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t('Phone Number')}
+          </label>
+          <input
+            type="tel"
+            name="phoneNumber"
+            value={formData.phoneNumber}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+            placeholder={t('Enter your phone number')}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t('Shipping Address')}
+          </label>
+          <LocationInput
+            onSelect={handleLocationSelect}
+            placeholder={t('Enter your shipping address')}
+            className="w-full"
+          />
+          {formData.shippingCost > 0 && (
+            <p className="mt-2 text-sm text-gray-600">
+              {t('Shipping Cost')}: {formData.shippingCost.toLocaleString()} XAF
+            </p>
+          )}
+        </div>
+
         <motion.button
           type="submit"
           whileHover={{ scale: 1.02 }}
@@ -131,4 +146,4 @@ const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onSubmit }) => {
   );
 };
 
-export default GuestCheckoutForm; 
+export default UserCheckoutForm; 

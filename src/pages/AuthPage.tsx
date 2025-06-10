@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import useUserAuthStore from '../store/userAuthStore';
@@ -10,9 +10,10 @@ import { User, Mail, Lock, Phone, ArrowLeft } from 'lucide-react';
 const AuthPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [isSignIn, setIsSignIn] = useState(true);
+  const [searchParams] = useSearchParams();
+  const [isSignIn, setIsSignIn] = useState(searchParams.get('mode') !== 'signup');
   const [loading, setLoading] = useState(false);
-  const { setUser } = useUserAuthStore();
+  const { signIn, setUser } = useUserAuthStore();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -20,6 +21,11 @@ const AuthPage: React.FC = () => {
     fullName: '',
     phoneNumber: '',
   });
+
+  useEffect(() => {
+    // Update mode when URL changes
+    setIsSignIn(searchParams.get('mode') !== 'signup');
+  }, [searchParams]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -30,46 +36,78 @@ const AuthPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
+    setLoading(true);    try {
       if (isSignIn) {
         // Sign In
-        const { data: { user }, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
 
         if (error) throw error;
-        if (user) {
-          setUser(user);
+        
+        if (data.user) {
+          setUser(data.user);
           toast.success(t('Successfully signed in'));
-          navigate('/profile');
+          navigate('/');
         }
       } else {
-        // Sign Up
-        const { data: { user }, error } = await supabase.auth.signUp({
+        // Sign Up - validate required fields
+        if (!formData.email || !formData.password || !formData.fullName) {
+          throw new Error('Please fill in all required fields');
+        }
+
+        // Validate phone number format if provided
+        if (formData.phoneNumber) {
+          const phoneRegex = /^[0-9]{9}$/;  // Expects 9 digits for Cameroon phone numbers
+          if (!phoneRegex.test(formData.phoneNumber)) {
+            throw new Error('Please enter a valid 9-digit phone number or leave it empty');
+          }
+        }        // Sign Up
+        const { data, error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
             data: {
               full_name: formData.fullName,
-              phone_number: formData.phoneNumber,
-            },
-          },
+              phone_number: formData.phoneNumber || null
+            }
+          }
         });
 
         if (error) throw error;
-        if (user) {
+        
+        if (data.user) {
+          // Insert user data into the users table
+          const { error: userError } = await supabase
+            .from('users')
+            .insert([
+              {
+                id: data.user.id,
+                email: formData.email,
+                full_name: formData.fullName,
+                phone_number: formData.phoneNumber || null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }
+            ]);
+
+          if (userError) throw userError;
+          
           toast.success(t('Registration successful! Please check your email to verify your account.'));
-          setIsSignIn(true);
+          navigate('/auth?mode=signin');
         }
       }
     } catch (error: any) {
+      console.error('Registration error:', error);
       toast.error(error.message || t('An error occurred'));
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleMode = () => {
+    navigate(`/auth?mode=${isSignIn ? 'signup' : 'signin'}`);
   };
 
   const formVariants = {
@@ -117,7 +155,7 @@ const AuthPage: React.FC = () => {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('Full Name')}
+                      {t('Full Name')} <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -135,20 +173,20 @@ const AuthPage: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('Phone Number')}
+                      {t('Phone Number')} <span className="text-gray-400">(Optional)</span>
                     </label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                       <input
                         type="tel"
                         name="phoneNumber"
-                        required
                         value={formData.phoneNumber}
                         onChange={handleInputChange}
                         className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                        placeholder={t('Enter your phone number')}
+                        placeholder={t('Enter your phone number (optional)')}
                       />
                     </div>
+                    <p className="mt-1 text-sm text-gray-500">Format: 9 digits, numbers only</p>
                   </div>
                 </>
               )}
@@ -181,6 +219,7 @@ const AuthPage: React.FC = () => {
                     type="password"
                     name="password"
                     required
+                    minLength={6}
                     value={formData.password}
                     onChange={handleInputChange}
                     className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
@@ -196,18 +235,17 @@ const AuthPage: React.FC = () => {
               >
                 {loading ? t('Please wait...') : (isSignIn ? t('Sign In') : t('Create Account'))}
               </button>
-            </form>
 
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => setIsSignIn(!isSignIn)}
-                className="text-green-600 hover:text-green-700 font-medium"
-              >
-                {isSignIn
-                  ? t('Don\'t have an account? Sign Up')
-                  : t('Already have an account? Sign In')}
-              </button>
-            </div>
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="text-green-600 hover:text-green-700 text-sm font-medium"
+                >
+                  {isSignIn ? t('Need an account? Sign Up') : t('Already have an account? Sign In')}
+                </button>
+              </div>
+            </form>
           </motion.div>
         </AnimatePresence>
       </div>

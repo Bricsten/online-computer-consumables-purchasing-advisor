@@ -1,7 +1,7 @@
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
-import Header from './Header';
+import { Header } from './Header';
 import Footer from './Footer';
 import WhatsAppButton from '../UI/WhatsAppButton';
 import ReviewModal from '../Reviews/ReviewModal';

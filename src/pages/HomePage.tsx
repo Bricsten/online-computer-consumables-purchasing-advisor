@@ -94,7 +94,7 @@ const HomePage: React.FC = () => {
             >
               {isAuthenticated ? (
                 <div className="flex justify-center space-x-4">
-                  <Link
+            <Link
                     to="/profile"
                     className="flex items-center justify-center bg-white hover:bg-yellow-100 text-gray-800 font-bold py-4 px-10 rounded-lg shadow-xl transition-all hover:shadow-2xl transform hover:-translate-y-1"
                   >
@@ -113,9 +113,9 @@ const HomePage: React.FC = () => {
                 <Link
                   to="/auth"
                   className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-12 rounded-lg shadow-xl transition-all hover:shadow-2xl transform hover:-translate-y-1 inline-block text-lg"
-                >
+            >
                   {t('Get Started')}
-                </Link>
+            </Link>
               )}
             </motion.div>
           </motion.div>

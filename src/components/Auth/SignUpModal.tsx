@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import useAuthStore from '../../store/authStore';
 
 interface SignUpModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface SignUpModalProps {
 
 const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSuccess, onSignInClick }) => {
   const { t } = useTranslation();
+  const { register } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -24,47 +25,37 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSuccess, o
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isLoading) return; // Prevent multiple submissions
     setIsLoading(true);
 
     try {
-      // 1. Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-            phone_number: formData.phoneNumber
-          }
-        }
-      });
+      // Validate form data
+      if (!formData.email || !formData.password || !formData.fullName || !formData.phoneNumber) {
+        throw new Error('Please fill in all fields');
+      }
 
-      if (authError) throw authError;
+      // Attempt to register
+      const success = await register(formData.email, formData.password, formData.fullName);
 
-      if (authData.user) {
-        // 2. Create user profile in users table
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: authData.user.id,
-              email: formData.email,
-              full_name: formData.fullName,
-              phone_number: formData.phoneNumber,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }
-          ]);
-
-        if (profileError) throw profileError;
-
+      if (success) {
         toast.success('Account created successfully! Please sign in.');
         onSuccess();
         onClose();
+      } else {
+        throw new Error('Failed to create account');
       }
     } catch (error) {
       console.error('Error during signup:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create account');
+      
+      // Check for specific error messages
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create account';
+      if (errorMessage.toLowerCase().includes('already registered')) {
+        toast.error('This email is already registered. Please sign in instead.');
+        onSignInClick(); // Automatically switch to sign in modal
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -143,6 +134,8 @@ const SignUpModal: React.FC<SignUpModalProps> = ({ isOpen, onClose, onSuccess, o
                       value={formData.phoneNumber}
                       onChange={handleInputChange}
                       required
+                      pattern="[0-9]+"
+                      title="Please enter only numbers"
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
                     />
                   </div>

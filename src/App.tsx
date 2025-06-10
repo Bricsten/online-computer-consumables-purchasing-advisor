@@ -42,10 +42,20 @@ function App() {
         <Route path="/products/:id" element={<ProductDetailPage />} />
         <Route path="/compare" element={<ComparePage />} />
         <Route path="/cart" element={<CartPage />} />
-        <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/order-confirmation/:id" element={<OrderConfirmationPage />} />
         
-        {/* User routes */}
+        {/* Protected routes */}
+        <Route
+          path="/checkout"
+          element={<CheckoutPage />}
+        />
+        <Route
+          path="/order-confirmation/:id"
+          element={
+            <PrivateRoute>
+              <OrderConfirmationPage />
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/profile"
           element={
@@ -73,9 +83,9 @@ function App() {
         <Route
           path="/admin/*"
           element={
-          <PrivateRoute>
-            <AdminDashboardPage />
-          </PrivateRoute>
+            <PrivateRoute>
+              <AdminDashboardPage />
+            </PrivateRoute>
           }
         />
 

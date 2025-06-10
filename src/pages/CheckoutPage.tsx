@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ShoppingBag } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import GuestCheckoutForm from '../components/Checkout/GuestCheckoutForm';
+import UserCheckoutForm from '../components/Checkout/UserCheckoutForm';
 import useCartStore from '../store/cartStore';
 import useUserAuthStore from '../store/userAuthStore';
 import useOrderStore from '../store/orderStore';
@@ -12,28 +13,31 @@ import useReviewModalStore from '../store/reviewModalStore';
 import { downloadReceipt } from '../utils/generateReceipt';
 import toast from 'react-hot-toast';
 
-interface GuestData {
+interface CheckoutData {
   fullName: string;
   email: string;
   phoneNumber: string;
   address: string;
+  shippingCost: number;
 }
 
 const CheckoutPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { items, getOrderSummary, clearCart } = useCartStore();
-  const { user } = useUserAuthStore();
+  const { user, isAuthenticated } = useUserAuthStore();
   const { createOrder } = useOrderStore();
   const { openModal } = useReviewModalStore();
   const [selectedPayment, setSelectedPayment] = useState<'mtn' | 'orange'>('mtn');
   const [mobileNumber, setMobileNumber] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [guestData, setGuestData] = useState<GuestData | null>(null);
-  const [showPayment, setShowPayment] = useState(!!user);
-
+  const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
+  const [showPayment, setShowPayment] = useState(false);
+  
   // Get order summary details
-  const { subtotal, shipping, total } = getOrderSummary();
+  const { subtotal } = getOrderSummary();
+  const shipping = checkoutData?.shippingCost || 0;
+  const total = subtotal + shipping;
 
   if (items.length === 0) {
     return (
@@ -59,8 +63,8 @@ const CheckoutPage: React.FC = () => {
     );
   }
 
-  const handleGuestSubmit = (data: GuestData) => {
-    setGuestData(data);
+  const handleCheckoutSubmit = (data: CheckoutData) => {
+    setCheckoutData(data);
     setShowPayment(true);
   };
 
@@ -70,11 +74,16 @@ const CheckoutPage: React.FC = () => {
       return;
     }
 
+    if (!checkoutData) {
+      toast.error(t('Please complete checkout details first'));
+      return;
+    }
+    
     setIsProcessing(true);
     try {
-      // Create order object with conditional guest data
+      // Create order object
       const orderData = {
-        user_id: user?.id,
+        userId: user?.id,
         items: items.map(item => ({
           id: item.product.id,
           name: item.product.name.en,
@@ -84,15 +93,14 @@ const CheckoutPage: React.FC = () => {
         total,
         subtotal,
         shipping,
-        payment_method: selectedPayment === 'mtn' ? 'MTN Mobile Money' : 'Orange Money',
-        payment_number: mobileNumber,
-        shipping_address: user ? user.user_metadata?.address : guestData?.address,
-        guest_info: !user ? {
-          full_name: guestData?.fullName,
-          email: guestData?.email,
-          phone_number: guestData?.phoneNumber
-        } : undefined,
-        created_at: new Date().toISOString()
+        shippingAddress: checkoutData.address,
+        paymentMethod: selectedPayment === 'mtn' ? 'MTN Mobile Money' : 'Orange Money',
+        paymentNumber: mobileNumber,
+        guestInfo: !isAuthenticated ? {
+          full_name: checkoutData.fullName,
+          email: checkoutData.email,
+          phone_number: checkoutData.phoneNumber
+        } : undefined
       };
 
       // Create order in database
@@ -100,15 +108,15 @@ const CheckoutPage: React.FC = () => {
 
       // Generate and download receipt
       downloadReceipt(order);
-
+      
       // Clear cart
       clearCart();
-
+      
       // Show success message
       toast.success(t('Payment successful! Your order has been confirmed.'));
 
       // If user is authenticated, show review modal after a delay
-      if (user) {
+      if (isAuthenticated) {
         setTimeout(() => {
           openModal();
         }, 1500);
@@ -123,7 +131,7 @@ const CheckoutPage: React.FC = () => {
       setIsProcessing(false);
     }
   };
-
+  
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8">
@@ -166,10 +174,14 @@ const CheckoutPage: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Guest Checkout Form or Payment Method */}
-        {!showPayment && !user ? (
-          <GuestCheckoutForm onSubmit={handleGuestSubmit} />
+                  
+        {/* Checkout Form or Payment Method */}
+        {!showPayment ? (
+          isAuthenticated ? (
+            <UserCheckoutForm user={user} onSubmit={handleCheckoutSubmit} />
+          ) : (
+            <GuestCheckoutForm onSubmit={handleCheckoutSubmit} />
+          )
         ) : (
           <div className="bg-white rounded-lg shadow-md p-6 mb-8">
             <h2 className="text-xl font-semibold mb-4">{t('Payment Method')}</h2>
@@ -196,55 +208,41 @@ const CheckoutPage: React.FC = () => {
                   <img src="/orange-logo.png" alt="Orange Money" className="h-8 mx-auto" />
                 </button>
               </div>
-
+            
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('Enter your Mobile Money number')}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('Mobile Money Number')}
                 </label>
                 <input
                   type="tel"
                   value={mobileNumber}
                   onChange={(e) => setMobileNumber(e.target.value)}
                   pattern="^(6|2)[0-9]{8}$"
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border rounded-md focus:ring-green-500 focus:border-green-500"
                   placeholder="6XX XXX XXX"
+                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('Enter your MTN or Orange Money number')}
+                </p>
               </div>
 
-              {/* Show guest information summary if guest checkout */}
-              {!user && guestData && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-medium mb-2">{t('Delivery Information')}</h3>
-                  <p>{guestData.fullName}</p>
-                  <p>{guestData.address}</p>
-                  <p>{guestData.phoneNumber}</p>
-                  <p>{guestData.email}</p>
-                </div>
-              )}
+              <motion.button
+                onClick={handlePaymentConfirm}
+                disabled={isProcessing}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full py-3 px-4 rounded-md text-white transition-colors ${
+                  isProcessing
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isProcessing ? t('Processing...') : t('Confirm Payment')}
+              </motion.button>
             </div>
           </div>
         )}
-
-        {/* Action Buttons */}
-        <div className="flex justify-between">
-          <button
-            onClick={() => navigate('/cart')}
-            className="px-6 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            {t('Back to Cart')}
-          </button>
-          {showPayment && (
-            <motion.button
-              onClick={handlePaymentConfirm}
-              disabled={isProcessing}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isProcessing ? t('Processing...') : t('Confirm Payment')}
-            </motion.button>
-          )}
-        </div>
       </div>
     </Layout>
   );

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import useUserAuthStore from '../../store/userAuthStore';
+import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 
 interface SignInModalProps {
@@ -14,7 +14,7 @@ interface SignInModalProps {
 
 const SignInModal: React.FC<SignInModalProps> = ({ isOpen, onClose, onSuccess, onSignUpClick }) => {
   const { t } = useTranslation();
-  const { signIn } = useUserAuthStore();
+  const { login } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -23,14 +23,29 @@ const SignInModal: React.FC<SignInModalProps> = ({ isOpen, onClose, onSuccess, o
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setIsLoading(true);
 
     try {
-      await signIn(formData.email, formData.password);
-      onSuccess();
+      const success = await login(formData.email, formData.password);
+      if (success) {
+        toast.success('Signed in successfully!');
+        onSuccess();
+        onClose();
+      } else {
+        throw new Error('Invalid email or password');
+      }
     } catch (error) {
       console.error('Error during sign in:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to sign in');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to sign in';
+      
+      if (errorMessage.toLowerCase().includes('invalid login credentials')) {
+        toast.error('Invalid email or password');
+      } else if (errorMessage.toLowerCase().includes('email not confirmed')) {
+        toast.error('Please verify your email address before signing in');
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -95,6 +110,7 @@ const SignInModal: React.FC<SignInModalProps> = ({ isOpen, onClose, onSuccess, o
                       value={formData.password}
                       onChange={handleInputChange}
                       required
+                      minLength={6}
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
                     />
                   </div>

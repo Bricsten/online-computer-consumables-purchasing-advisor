@@ -9,7 +9,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, fullName: string) => Promise<boolean>;
+  register: (email: string, password: string, fullName: string, phoneNumber?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   addShippingAddress: (address: Omit<ShippingAddress, 'id' | 'userId'>) => Promise<void>;
@@ -81,78 +81,132 @@ const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (email: string, password: string, fullName: string) => {
+      register: async (email: string, password: string, fullName: string, phoneNumber?: string) => {
         set({ isLoading: true, error: null });
         try {
-          console.log('Attempting to register with email:', email);
-
-          // Try to sign up the user
+          // First check auth.users using signUp (this will fail if user exists)
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password,
             options: {
               data: {
-                full_name: fullName
+                full_name: fullName,
+                phone_number: phoneNumber || null
               }
             }
           });
 
           if (authError) {
-            console.error('Registration error:', authError);
+            // If user exists in auth.users, try to create just the public.users record
+            if (authError.message.includes('already registered')) {
+              // Try to sign in to get the user ID
+              const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password
+              });
+
+              if (signInError) {
+                throw new Error('This email is already registered. Please sign in instead.');
+              }
+
+              if (signInData.user) {
+                // Check if user exists in public.users
+                const { data: existingUser } = await supabase
+                  .from('users')
+                  .select('id')
+                  .eq('id', signInData.user.id)
+                  .single();
+
+                if (!existingUser) {
+                  // Create user record in public.users table
+                  const { error: userError } = await supabase
+                    .from('users')
+                    .insert([
+                      {
+                        id: signInData.user.id,
+                        email: email,
+                        full_name: fullName,
+                        phone_number: phoneNumber || null,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                      }
+                    ]);
+
+                  if (userError) {
+                    console.error('Error creating user record:', userError);
+                    throw userError;
+                  }
+
+                  // Set the user state
+                  set({ 
+                    user: {
+                      id: signInData.user.id,
+                      email: email,
+                      fullName: fullName,
+                      phoneNumber: phoneNumber || null,
+                      shippingAddresses: [],
+                      paymentMethods: []
+                    },
+                    isAuthenticated: true,
+                    isLoading: false
+                  });
+                  return true;
+                }
+              }
+              throw new Error('This email is already registered. Please sign in instead.');
+            }
             throw authError;
           }
 
-          console.log('Registration successful:', authData);
-
-          if (authData.user) {
-            console.log('Creating user record for ID:', authData.user.id);
-            
-            const timestamp = new Date().toISOString();
-            const { error: userError } = await supabase
-              .from('users')
-              .insert([
-                {
-                  id: authData.user.id,
-                  email: authData.user.email,
-                  full_name: fullName,
-                  phone_number: null,
-                  created_at: timestamp,
-                  updated_at: timestamp
-                }
-              ])
-              .select()
-              .single();
-
-            if (userError) {
-              console.error('Error creating user record:', userError);
-              // If we fail to create the user record, we should clean up the auth user
-              await supabase.auth.signOut();
-              throw userError;
-            }
-
-            console.log('User record created successfully');
-
-            set({ 
-              user: {
-                id: authData.user.id,
-                email: authData.user.email!,
-                fullName,
-                phoneNumber: null,
-                shippingAddresses: [],
-                paymentMethods: []
-              },
-              isAuthenticated: true,
-              isLoading: false
-            });
-            return true;
+          if (!authData.user) {
+            throw new Error('Registration failed - no user data received');
           }
-          return false;
+
+          // Create user record in public.users table
+          const { error: userError } = await supabase
+            .from('users')
+            .insert([
+              {
+                id: authData.user.id,
+                email: email,
+                full_name: fullName,
+                phone_number: phoneNumber || null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }
+            ]);
+
+          if (userError) {
+            console.error('Error creating user record:', userError);
+            // If we fail to create the user record, clean up the auth user
+            await supabase.auth.signOut();
+            throw userError;
+          }
+
+          console.log('User record created successfully');
+
+          set({ 
+            user: {
+              id: authData.user.id,
+              email: email,
+              fullName: fullName,
+              phoneNumber: phoneNumber || null,
+              shippingAddresses: [],
+              paymentMethods: []
+            },
+            isAuthenticated: true,
+            isLoading: false
+          });
+          return true;
+
         } catch (error: any) {
           console.error('Registration error:', error);
+          
           // Handle specific error cases
-          if (error.message?.toLowerCase().includes('already registered')) {
+          const errorMessage = error.message?.toLowerCase() || '';
+          if (errorMessage.includes('already registered') || errorMessage.includes('already exists')) {
             set({ 
-              error: 'This email is already registered. Please try logging in instead.',
+              error: 'This email is already registered. Please sign in instead.',
               isLoading: false 
             });
           } else {
